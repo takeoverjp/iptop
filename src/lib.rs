@@ -23,8 +23,7 @@ fn print_usage(program: &str, opts: &Options) {
 
 impl Config {
   pub fn new(mut args: env::Args) -> Result<Config, String> {
-    let args: Vec<String> = args.collect();
-    let program = args[0].clone();
+    let program = args.next().unwrap();
 
     let mut opts = Options::new();
     opts.optopt(
@@ -34,7 +33,7 @@ impl Config {
       "SECONDS",
     );
     opts.optflag("h", "help", "print this help menu");
-    let matches = match opts.parse(&args[1..]) {
+    let matches = match opts.parse(args) {
       Ok(m) => m,
       Err(err) => {
         print_usage(&program, &opts);

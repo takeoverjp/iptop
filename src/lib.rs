@@ -1,12 +1,30 @@
 use getopts::Options;
+use pcap::Capture;
 use pcap::Device;
+use std::convert::TryInto;
 use std::env;
 use std::process;
 
 pub fn run(config: Config) -> Result<(), String> {
   println!("config = {:?}", config);
 
-  let mut cap = Device::lookup().unwrap().open().unwrap();
+  let device = if config.devices.is_empty() {
+    Device::lookup().unwrap()
+  } else {
+    (*Device::list()
+      .unwrap()
+      .iter()
+      .filter(|&device| device.name == config.devices[0])
+      .next()
+      .unwrap())
+    .clone()
+  };
+
+  let mut cap = Capture::from_device(device)
+    .unwrap()
+    .timeout((config.delay_sec * 1000).try_into().unwrap_or(0))
+    .open()
+    .unwrap();
 
   while let Ok(packet) = cap.next() {
     println!("received packet! {:?}", packet);

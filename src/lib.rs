@@ -1,13 +1,20 @@
 use getopts::Options;
+use pcap::Device;
 use std::env;
 use std::process;
 
 pub fn run(config: Config) -> Result<(), String> {
-  println!("delay_sec = {}", config.delay_sec);
-  println!("devices = {:?}", config.devices);
+  println!("config = {:?}", config);
+
+  let mut cap = Device::lookup().unwrap().open().unwrap();
+
+  while let Ok(packet) = cap.next() {
+    println!("received packet! {:?}", packet);
+  }
   Ok(())
 }
 
+#[derive(Debug)]
 pub struct Config {
   delay_sec: u32,
   devices: Vec<String>,

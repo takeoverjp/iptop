@@ -54,7 +54,9 @@ impl Config {
       }
     };
 
-    let devices = matches.free.clone();
-    Ok(Config { delay_sec, devices })
+    Ok(Config {
+      delay_sec,
+      devices: matches.free,
+    })
   }
 }

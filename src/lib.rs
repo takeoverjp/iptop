@@ -1,35 +1,40 @@
 use getopts::Options;
-use pcap::Capture;
-use pcap::Device;
-use std::convert::TryInto;
+use pnet::datalink;
+use pnet::datalink::Channel::Ethernet;
+use pnet::datalink::NetworkInterface;
+use pnet::packet::ethernet::EthernetPacket;
 use std::env;
 use std::process;
 
 pub fn run(config: Config) -> Result<(), String> {
   println!("config = {:?}", config);
-
-  let device = if config.devices.is_empty() {
-    Device::lookup().unwrap()
-  } else {
-    (*Device::list()
-      .unwrap()
-      .iter()
-      .filter(|&device| device.name == config.devices[0])
-      .next()
-      .unwrap())
-    .clone()
-  };
-
-  let mut cap = Capture::from_device(device)
-    .unwrap()
-    .timeout((config.delay_sec * 1000).try_into().unwrap_or(0))
-    .open()
+  let interface_names_match = |iface: &NetworkInterface| config.devices.contains(&iface.name);
+  let interface = datalink::interfaces()
+    .into_iter()
+    .filter(interface_names_match)
+    .next()
     .unwrap();
 
-  while let Ok(packet) = cap.next() {
-    println!("received packet! {:?}", packet);
+  let (_tx, mut rx) = match datalink::channel(&interface, Default::default()) {
+    Ok(Ethernet(tx, rx)) => (tx, rx),
+    Ok(_) => panic!("Unhandled channel type"),
+    Err(e) => panic!(
+      "An error occurred when creating the datalink channel: {}",
+      e
+    ),
+  };
+
+  loop {
+    match rx.next() {
+      Ok(packet) => {
+        let packet = EthernetPacket::new(packet).unwrap();
+        println!("packet = {:?}", packet);
+      }
+      Err(e) => {
+        panic!("An error occurred while reading: {}", e);
+      }
+    }
   }
-  Ok(())
 }
 
 #[derive(Debug)]

@@ -7,4 +7,4 @@ edition = "2018"
 
 [dependencies]
 getopts = "0.2"
-pcap = "0.9"
+pnet = "0.28"

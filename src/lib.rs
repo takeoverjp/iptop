@@ -2,10 +2,16 @@ use getopts::Options;
 use pnet::datalink;
 use pnet::datalink::Channel::Ethernet;
 use pnet::datalink::NetworkInterface;
-use pnet::packet::ethernet::EthernetPacket;
+use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
 use std::env;
 use std::process;
 
+fn handle_ethernet_packet(packet: &EthernetPacket) {
+  match packet.get_ethertype() {
+    EtherTypes::Ipv4 => println!("ipv4"),
+    _ => println!("not supported EtherTypes"),
+  };
+}
 pub fn run(config: Config) -> Result<(), String> {
   println!("config = {:?}", config);
   let interface_names_match = |iface: &NetworkInterface| config.devices.contains(&iface.name);
@@ -28,6 +34,7 @@ pub fn run(config: Config) -> Result<(), String> {
     match rx.next() {
       Ok(packet) => {
         let packet = EthernetPacket::new(packet).unwrap();
+        handle_ethernet_packet(&packet);
         println!("packet = {:?}", packet);
       }
       Err(e) => {

@@ -3,12 +3,28 @@ use pnet::datalink;
 use pnet::datalink::Channel::Ethernet;
 use pnet::datalink::NetworkInterface;
 use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
+use pnet::packet::ip::IpNextHeaderProtocols;
+use pnet::packet::ipv4::Ipv4Packet;
+use pnet::packet::Packet;
 use std::env;
 use std::process;
 
+fn handle_ipv4_packet(packet: &Ipv4Packet) {
+  println!("{:?}", packet);
+  match packet.get_next_level_protocol() {
+    IpNextHeaderProtocols::Tcp => println!("tcp"),
+    _ => println!("not supported ip protocol"),
+  }
+}
+
 fn handle_ethernet_packet(packet: &EthernetPacket) {
   match packet.get_ethertype() {
-    EtherTypes::Ipv4 => println!("ipv4"),
+    EtherTypes::Ipv4 => {
+      if let Some(ipv4_packet) = Ipv4Packet::new(packet.payload()) {
+        handle_ipv4_packet(&ipv4_packet);
+      }
+      println!("ipv4");
+    }
     _ => println!("not supported EtherTypes"),
   };
 }

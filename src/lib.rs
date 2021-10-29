@@ -8,38 +8,74 @@ use pnet::packet::ipv4::Ipv4Packet;
 use pnet::packet::tcp::TcpPacket;
 use pnet::packet::Packet;
 use pnet::packet::PacketSize;
+use std::collections::HashMap;
 use std::env;
+use std::net::Ipv4Addr;
 use std::process;
 
-fn handle_tcp_packet(ipv4_packet: &Ipv4Packet, tcp_packet: &TcpPacket) {
-  // println!("{:?}", tcp_packet);
-  println!("TCP {} bytes, {}:{} -> {}:{}", ipv4_packet.packet_size(), ipv4_packet.get_source(), tcp_packet.get_source(), ipv4_packet.get_destination(), tcp_packet.get_destination());
+#[derive(Debug, Eq, PartialEq, Hash)]
+struct MyPacket {
+  ipv4_src: Ipv4Addr,
+  ipv4_dst: Ipv4Addr,
+  src_port: u16,
+  dst_port: u16,
 }
 
-fn handle_ipv4_packet(ipv4_packet: &Ipv4Packet) {
+impl MyPacket {
+  fn new(ipv4_src: Ipv4Addr, ipv4_dst: Ipv4Addr, src_port: u16, dst_port: u16) -> MyPacket {
+    MyPacket {
+      ipv4_src,
+      ipv4_dst,
+      src_port,
+      dst_port,
+    }
+  }
+}
+
+fn handle_tcp_packet(
+  accum: &mut HashMap<MyPacket, usize>,
+  ipv4_packet: &Ipv4Packet,
+  tcp_packet: &TcpPacket,
+) {
+  // println!("{:?}", tcp_packet);
+  let packet = MyPacket::new(
+    ipv4_packet.get_source(),
+    ipv4_packet.get_destination(),
+    tcp_packet.get_source(),
+    tcp_packet.get_destination(),
+  );
+  let packet_size = ipv4_packet.packet_size();
+  println!("TCP {} bytes, {:?}", packet_size, packet);
+  let count = accum.entry(packet).or_insert(0);
+  *count += packet_size;
+  println!("accum = {:?}", accum);
+}
+
+fn handle_ipv4_packet(accum: &mut HashMap<MyPacket, usize>, ipv4_packet: &Ipv4Packet) {
   // println!("{:?}", ipv4_packet);
   match ipv4_packet.get_next_level_protocol() {
     IpNextHeaderProtocols::Tcp => {
       if let Some(tcp_packet) = TcpPacket::new(ipv4_packet.payload()) {
-        handle_tcp_packet(ipv4_packet, &tcp_packet);
+        handle_tcp_packet(accum, ipv4_packet, &tcp_packet);
       }
-    },
+    }
     _ => println!("not supported ip protocol"),
   }
 }
 
-fn handle_ethernet_packet(packet: &EthernetPacket) {
+fn handle_ethernet_packet(accum: &mut HashMap<MyPacket, usize>, packet: &EthernetPacket) {
   // println!("{:?}", packet);
   match packet.get_ethertype() {
     EtherTypes::Ipv4 => {
       if let Some(ipv4_packet) = Ipv4Packet::new(packet.payload()) {
-        handle_ipv4_packet(&ipv4_packet);
+        handle_ipv4_packet(accum, &ipv4_packet);
       }
     }
     _ => println!("not supported EtherTypes"),
   };
 }
 pub fn run(config: Config) -> Result<(), String> {
+  let mut accum = HashMap::<MyPacket, usize>::new();
   println!("config = {:?}", config);
   let interface_names_match = |iface: &NetworkInterface| config.devices.contains(&iface.name);
   let interface = datalink::interfaces()
@@ -61,7 +97,7 @@ pub fn run(config: Config) -> Result<(), String> {
     match rx.next() {
       Ok(packet) => {
         let packet = EthernetPacket::new(packet).unwrap();
-        handle_ethernet_packet(&packet);
+        handle_ethernet_packet(&mut accum, &packet);
       }
       Err(e) => {
         panic!("An error occurred while reading: {}", e);

@@ -5,25 +5,36 @@ use pnet::datalink::NetworkInterface;
 use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
+use pnet::packet::tcp::TcpPacket;
 use pnet::packet::Packet;
+use pnet::packet::PacketSize;
 use std::env;
 use std::process;
 
-fn handle_ipv4_packet(packet: &Ipv4Packet) {
-  println!("{:?}", packet);
-  match packet.get_next_level_protocol() {
-    IpNextHeaderProtocols::Tcp => println!("tcp"),
+fn handle_tcp_packet(ipv4_packet: &Ipv4Packet, tcp_packet: &TcpPacket) {
+  // println!("{:?}", tcp_packet);
+  println!("TCP {} bytes, {}:{} -> {}:{}", ipv4_packet.packet_size(), ipv4_packet.get_source(), tcp_packet.get_source(), ipv4_packet.get_destination(), tcp_packet.get_destination());
+}
+
+fn handle_ipv4_packet(ipv4_packet: &Ipv4Packet) {
+  // println!("{:?}", ipv4_packet);
+  match ipv4_packet.get_next_level_protocol() {
+    IpNextHeaderProtocols::Tcp => {
+      if let Some(tcp_packet) = TcpPacket::new(ipv4_packet.payload()) {
+        handle_tcp_packet(ipv4_packet, &tcp_packet);
+      }
+    },
     _ => println!("not supported ip protocol"),
   }
 }
 
 fn handle_ethernet_packet(packet: &EthernetPacket) {
+  // println!("{:?}", packet);
   match packet.get_ethertype() {
     EtherTypes::Ipv4 => {
       if let Some(ipv4_packet) = Ipv4Packet::new(packet.payload()) {
         handle_ipv4_packet(&ipv4_packet);
       }
-      println!("ipv4");
     }
     _ => println!("not supported EtherTypes"),
   };
@@ -51,7 +62,6 @@ pub fn run(config: Config) -> Result<(), String> {
       Ok(packet) => {
         let packet = EthernetPacket::new(packet).unwrap();
         handle_ethernet_packet(&packet);
-        println!("packet = {:?}", packet);
       }
       Err(e) => {
         panic!("An error occurred while reading: {}", e);

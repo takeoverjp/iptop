@@ -12,6 +12,8 @@ use std::collections::HashMap;
 use std::env;
 use std::net::Ipv4Addr;
 use std::process;
+use std::time::Duration;
+use std::time::Instant;
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 struct MyPacket {
@@ -45,10 +47,9 @@ fn handle_tcp_packet(
     tcp_packet.get_destination(),
   );
   let packet_size = ipv4_packet.packet_size();
-  println!("TCP {} bytes, {:?}", packet_size, packet);
+  // println!("TCP {} bytes, {:?}", packet_size, packet);
   let count = accum.entry(packet).or_insert(0);
   *count += packet_size;
-  println!("accum = {:?}", accum);
 }
 
 fn handle_ipv4_packet(accum: &mut HashMap<MyPacket, usize>, ipv4_packet: &Ipv4Packet) {
@@ -84,7 +85,9 @@ pub fn run(config: Config) -> Result<(), String> {
     .next()
     .unwrap();
 
-  let (_tx, mut rx) = match datalink::channel(&interface, Default::default()) {
+  let mut channel_cfg: datalink::Config = datalink::Config::default();
+  channel_cfg.read_timeout = Some(Duration::from_secs(config.delay_sec));
+  let (_tx, mut rx) = match datalink::channel(&interface, channel_cfg) {
     Ok(Ethernet(tx, rx)) => (tx, rx),
     Ok(_) => panic!("Unhandled channel type"),
     Err(e) => panic!(
@@ -93,6 +96,7 @@ pub fn run(config: Config) -> Result<(), String> {
     ),
   };
 
+  let mut disp_time = Instant::now();
   loop {
     match rx.next() {
       Ok(packet) => {
@@ -103,12 +107,17 @@ pub fn run(config: Config) -> Result<(), String> {
         panic!("An error occurred while reading: {}", e);
       }
     }
+    if disp_time.elapsed().as_secs() < config.delay_sec {
+      continue;
+    }
+    println!("accum = {:?}", accum);
+    disp_time = Instant::now();
   }
 }
 
 #[derive(Debug)]
 pub struct Config {
-  delay_sec: u32,
+  delay_sec: u64,
   devices: Vec<String>,
 }
 
@@ -145,7 +154,7 @@ impl Config {
       process::exit(0);
     }
 
-    let delay_sec = match matches.opt_get_default::<u32>("d", 0) {
+    let delay_sec = match matches.opt_get_default::<u64>("d", 0) {
       Ok(m) => m,
       Err(err) => {
         print_usage(&program, &opts);

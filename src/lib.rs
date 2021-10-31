@@ -3,9 +3,10 @@ use pnet::datalink;
 use pnet::datalink::Channel::Ethernet;
 use pnet::datalink::NetworkInterface;
 use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
-use pnet::packet::ip::IpNextHeaderProtocols;
+use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
 use pnet::packet::ipv4::Ipv4Packet;
 use pnet::packet::tcp::TcpPacket;
+use pnet::packet::udp::UdpPacket;
 use pnet::packet::Packet;
 use pnet::packet::PacketSize;
 use std::collections::HashMap;
@@ -17,6 +18,7 @@ use std::time::Instant;
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 struct MyPacket {
+  protocol: IpNextHeaderProtocol,
   ipv4_src: Ipv4Addr,
   ipv4_dst: Ipv4Addr,
   src_port: u16,
@@ -24,8 +26,15 @@ struct MyPacket {
 }
 
 impl MyPacket {
-  fn new(ipv4_src: Ipv4Addr, ipv4_dst: Ipv4Addr, src_port: u16, dst_port: u16) -> MyPacket {
+  fn new(
+    protocol: IpNextHeaderProtocol,
+    ipv4_src: Ipv4Addr,
+    ipv4_dst: Ipv4Addr,
+    src_port: u16,
+    dst_port: u16,
+  ) -> MyPacket {
     MyPacket {
+      protocol,
       ipv4_src,
       ipv4_dst,
       src_port,
@@ -41,6 +50,7 @@ fn handle_tcp_packet(
 ) {
   // println!("{:?}", tcp_packet);
   let packet = MyPacket::new(
+    IpNextHeaderProtocols::Tcp,
     ipv4_packet.get_source(),
     ipv4_packet.get_destination(),
     tcp_packet.get_source(),
@@ -48,6 +58,25 @@ fn handle_tcp_packet(
   );
   let packet_size = ipv4_packet.packet_size();
   // println!("TCP {} bytes, {:?}", packet_size, packet);
+  let count = accum.entry(packet).or_insert(0);
+  *count += packet_size;
+}
+
+fn handle_udp_packet(
+  accum: &mut HashMap<MyPacket, usize>,
+  ipv4_packet: &Ipv4Packet,
+  udp_packet: &UdpPacket,
+) {
+  // println!("{:?}", tcp_packet);
+  let packet = MyPacket::new(
+    IpNextHeaderProtocols::Udp,
+    ipv4_packet.get_source(),
+    ipv4_packet.get_destination(),
+    udp_packet.get_source(),
+    udp_packet.get_destination(),
+  );
+  let packet_size = ipv4_packet.packet_size();
+  // println!("UDP {} bytes, {:?}", packet_size, packet);
   let count = accum.entry(packet).or_insert(0);
   *count += packet_size;
 }
@@ -60,7 +89,15 @@ fn handle_ipv4_packet(accum: &mut HashMap<MyPacket, usize>, ipv4_packet: &Ipv4Pa
         handle_tcp_packet(accum, ipv4_packet, &tcp_packet);
       }
     }
-    _ => println!("not supported ip protocol"),
+    IpNextHeaderProtocols::Udp => {
+      if let Some(udp_packet) = UdpPacket::new(ipv4_packet.payload()) {
+        handle_udp_packet(accum, ipv4_packet, &udp_packet);
+      }
+    }
+    _ => println!(
+      "not supported ip protocol {:?}",
+      ipv4_packet.get_next_level_protocol()
+    ),
   }
 }
 
@@ -72,7 +109,7 @@ fn handle_ethernet_packet(accum: &mut HashMap<MyPacket, usize>, packet: &Etherne
         handle_ipv4_packet(accum, &ipv4_packet);
       }
     }
-    _ => println!("not supported EtherTypes"),
+    _ => println!("not supported EtherTypes {:?}", packet.get_ethertype()),
   };
 }
 pub fn run(config: Config) -> Result<(), String> {

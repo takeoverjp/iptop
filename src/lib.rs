@@ -109,6 +109,7 @@ fn handle_ethernet_packet(accum: &mut HashMap<MyPacket, usize>, packet: &Etherne
         handle_ipv4_packet(accum, &ipv4_packet);
       }
     }
+    EtherTypes::Arp => {}
     _ => println!("not supported EtherTypes {:?}", packet.get_ethertype()),
   };
 }

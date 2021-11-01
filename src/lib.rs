@@ -141,15 +141,19 @@ pub fn run(config: Config) -> Result<(), String> {
         let packet = EthernetPacket::new(packet).unwrap();
         handle_ethernet_packet(&mut accum, &packet);
       }
-      Err(e) => {
-        panic!("An error occurred while reading: {}", e);
-      }
+      Err(e) => match e.kind() {
+        std::io::ErrorKind::TimedOut => {}
+        _ => {
+          panic!("An error occurred while reading: {}", e);
+        }
+      },
     }
     if disp_time.elapsed().as_secs() < config.delay_sec {
       continue;
     }
     println!("accum = {:?}", accum);
     disp_time = Instant::now();
+    accum.clear();
   }
 }
 

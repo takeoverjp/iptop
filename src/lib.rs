@@ -151,7 +151,7 @@ pub fn run(config: Config) -> Result<(), String> {
     if disp_time.elapsed().as_secs() < config.delay_sec {
       continue;
     }
-    println!("accum = {:?}", accum);
+    println!("{}accum = {:#?}", termion::clear::All, accum);
     disp_time = Instant::now();
     accum.clear();
   }

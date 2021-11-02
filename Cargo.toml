@@ -8,3 +8,4 @@ edition = "2018"
 [dependencies]
 getopts = "0.2"
 pnet = "0.28"
+termion = "1.5"

@@ -11,6 +11,7 @@ use pnet::packet::Packet;
 use pnet::packet::PacketSize;
 use std::collections::HashMap;
 use std::env;
+use std::fmt;
 use std::net::Ipv4Addr;
 use std::process;
 use std::time::Duration;
@@ -43,11 +44,32 @@ impl MyPacket {
   }
 }
 
-fn handle_tcp_packet(
-  accum: &mut HashMap<MyPacket, usize>,
-  ipv4_packet: &Ipv4Packet,
-  tcp_packet: &TcpPacket,
-) {
+#[derive(Debug)]
+struct Accumulation {
+  map: HashMap<MyPacket, usize>,
+}
+
+impl Accumulation {
+  fn new() -> Accumulation {
+    Accumulation {
+      map: HashMap::new(),
+    }
+  }
+}
+
+impl fmt::Display for Accumulation {
+  fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
+    for (packet, size) in self.map.iter() {
+      println!(
+        "{}:{} -> {}:{}\t{}",
+        packet.ipv4_src, packet.src_port, packet.ipv4_dst, packet.dst_port, size
+      );
+    }
+    Ok(())
+  }
+}
+
+fn handle_tcp_packet(accum: &mut Accumulation, ipv4_packet: &Ipv4Packet, tcp_packet: &TcpPacket) {
   // println!("{:?}", tcp_packet);
   let packet = MyPacket::new(
     IpNextHeaderProtocols::Tcp,
@@ -58,15 +80,11 @@ fn handle_tcp_packet(
   );
   let packet_size = ipv4_packet.packet_size();
   // println!("TCP {} bytes, {:?}", packet_size, packet);
-  let count = accum.entry(packet).or_insert(0);
+  let count = accum.map.entry(packet).or_insert(0);
   *count += packet_size;
 }
 
-fn handle_udp_packet(
-  accum: &mut HashMap<MyPacket, usize>,
-  ipv4_packet: &Ipv4Packet,
-  udp_packet: &UdpPacket,
-) {
+fn handle_udp_packet(accum: &mut Accumulation, ipv4_packet: &Ipv4Packet, udp_packet: &UdpPacket) {
   // println!("{:?}", tcp_packet);
   let packet = MyPacket::new(
     IpNextHeaderProtocols::Udp,
@@ -77,11 +95,11 @@ fn handle_udp_packet(
   );
   let packet_size = ipv4_packet.packet_size();
   // println!("UDP {} bytes, {:?}", packet_size, packet);
-  let count = accum.entry(packet).or_insert(0);
+  let count = accum.map.entry(packet).or_insert(0);
   *count += packet_size;
 }
 
-fn handle_ipv4_packet(accum: &mut HashMap<MyPacket, usize>, ipv4_packet: &Ipv4Packet) {
+fn handle_ipv4_packet(accum: &mut Accumulation, ipv4_packet: &Ipv4Packet) {
   // println!("{:?}", ipv4_packet);
   match ipv4_packet.get_next_level_protocol() {
     IpNextHeaderProtocols::Tcp => {
@@ -101,7 +119,7 @@ fn handle_ipv4_packet(accum: &mut HashMap<MyPacket, usize>, ipv4_packet: &Ipv4Pa
   }
 }
 
-fn handle_ethernet_packet(accum: &mut HashMap<MyPacket, usize>, packet: &EthernetPacket) {
+fn handle_ethernet_packet(accum: &mut Accumulation, packet: &EthernetPacket) {
   // println!("{:?}", packet);
   match packet.get_ethertype() {
     EtherTypes::Ipv4 => {
@@ -114,7 +132,7 @@ fn handle_ethernet_packet(accum: &mut HashMap<MyPacket, usize>, packet: &Etherne
   };
 }
 pub fn run(config: Config) -> Result<(), String> {
-  let mut accum = HashMap::<MyPacket, usize>::new();
+  let mut accum = Accumulation::new();
   println!("config = {:?}", config);
   let interface_names_match = |iface: &NetworkInterface| config.devices.contains(&iface.name);
   let interface = datalink::interfaces()
@@ -151,9 +169,11 @@ pub fn run(config: Config) -> Result<(), String> {
     if disp_time.elapsed().as_secs() < config.delay_sec {
       continue;
     }
-    println!("{}accum = {:#?}", termion::clear::All, accum);
+    println!("{}src -> dst\tbytes", termion::clear::All);
+    println!("---------------------");
+    println!("{}", accum);
     disp_time = Instant::now();
-    accum.clear();
+    accum.map.clear();
   }
 }
 

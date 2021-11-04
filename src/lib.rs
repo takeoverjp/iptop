@@ -18,7 +18,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 #[derive(Debug, Eq, PartialEq, Hash)]
-struct MyPacket {
+struct Connection {
   protocol: IpNextHeaderProtocol,
   ipv4_src: Ipv4Addr,
   ipv4_dst: Ipv4Addr,
@@ -26,15 +26,15 @@ struct MyPacket {
   dst_port: u16,
 }
 
-impl MyPacket {
+impl Connection {
   fn new(
     protocol: IpNextHeaderProtocol,
     ipv4_src: Ipv4Addr,
     ipv4_dst: Ipv4Addr,
     src_port: u16,
     dst_port: u16,
-  ) -> MyPacket {
-    MyPacket {
+  ) -> Connection {
+    Connection {
       protocol,
       ipv4_src,
       ipv4_dst,
@@ -46,7 +46,7 @@ impl MyPacket {
 
 #[derive(Debug)]
 struct Accumulation {
-  map: HashMap<MyPacket, usize>,
+  map: HashMap<Connection, usize>,
 }
 
 impl Accumulation {
@@ -54,6 +54,15 @@ impl Accumulation {
     Accumulation {
       map: HashMap::new(),
     }
+  }
+
+  fn add(&mut self, conn: Connection, packet_size: usize) {
+    let count = self.map.entry(conn).or_insert(0);
+    *count += packet_size;
+  }
+
+  fn clear(&mut self) {
+    self.map.clear();
   }
 }
 
@@ -71,7 +80,7 @@ impl fmt::Display for Accumulation {
 
 fn handle_tcp_packet(accum: &mut Accumulation, ipv4_packet: &Ipv4Packet, tcp_packet: &TcpPacket) {
   // println!("{:?}", tcp_packet);
-  let packet = MyPacket::new(
+  let conn = Connection::new(
     IpNextHeaderProtocols::Tcp,
     ipv4_packet.get_source(),
     ipv4_packet.get_destination(),
@@ -80,13 +89,12 @@ fn handle_tcp_packet(accum: &mut Accumulation, ipv4_packet: &Ipv4Packet, tcp_pac
   );
   let packet_size = ipv4_packet.packet_size();
   // println!("TCP {} bytes, {:?}", packet_size, packet);
-  let count = accum.map.entry(packet).or_insert(0);
-  *count += packet_size;
+  accum.add(conn, packet_size);
 }
 
 fn handle_udp_packet(accum: &mut Accumulation, ipv4_packet: &Ipv4Packet, udp_packet: &UdpPacket) {
   // println!("{:?}", tcp_packet);
-  let packet = MyPacket::new(
+  let conn = Connection::new(
     IpNextHeaderProtocols::Udp,
     ipv4_packet.get_source(),
     ipv4_packet.get_destination(),
@@ -95,8 +103,7 @@ fn handle_udp_packet(accum: &mut Accumulation, ipv4_packet: &Ipv4Packet, udp_pac
   );
   let packet_size = ipv4_packet.packet_size();
   // println!("UDP {} bytes, {:?}", packet_size, packet);
-  let count = accum.map.entry(packet).or_insert(0);
-  *count += packet_size;
+  accum.add(conn, packet_size);
 }
 
 fn handle_ipv4_packet(accum: &mut Accumulation, ipv4_packet: &Ipv4Packet) {
@@ -173,7 +180,7 @@ pub fn run(config: Config) -> Result<(), String> {
     println!("---------------------");
     println!("{}", accum);
     disp_time = Instant::now();
-    accum.map.clear();
+    accum.clear();
   }
 }
 

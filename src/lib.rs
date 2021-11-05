@@ -119,6 +119,7 @@ fn handle_ipv4_packet(accum: &mut Accumulation, ipv4_packet: &Ipv4Packet) {
         handle_udp_packet(accum, ipv4_packet, &udp_packet);
       }
     }
+    IpNextHeaderProtocols::Igmp => {}
     _ => println!(
       "not supported ip protocol {:?}",
       ipv4_packet.get_next_level_protocol()
@@ -135,7 +136,11 @@ fn handle_ethernet_packet(accum: &mut Accumulation, packet: &EthernetPacket) {
       }
     }
     EtherTypes::Arp => {}
-    _ => println!("not supported EtherTypes {:?}", packet.get_ethertype()),
+    EtherTypes::Lldp => {}
+    _ => {
+      // If EtherTypes is less than 1500, it is a length field
+      println!("not supported EtherTypes {:?}", packet.get_ethertype())
+    }
   };
 }
 pub fn run(config: Config) -> Result<(), String> {
